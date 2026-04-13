@@ -4,9 +4,8 @@ import random
 from datetime import datetime
 
 
-# -----------------------
 # DATA MODEL
-# -----------------------
+
 class GroceryItem:
     __slots__ = ("name", "base_price", "current_price")
 
@@ -40,9 +39,9 @@ customer_done = True
 customer_wallet = 0
 
 
-# -----------------------
+
 # LOGIC
-# -----------------------
+
 def generate_cart():
     global current_cart
 
@@ -108,9 +107,9 @@ def new_customer():
     update_display()
 
 
-# -----------------------
-# CHECKOUT + PAYMENT LOGIC
-# -----------------------
+
+# CHECKOUT + PAYMENT 
+
 def checkout():
     global daily_earnings, customer_done, customer_wallet
 
@@ -173,9 +172,9 @@ def clock_out():
     root.destroy()
 
 
-# -----------------------
+
 # GUI
-# -----------------------
+
 root = tk.Tk()
 root.title("Supermarket Register")
 root.geometry("500x550")
