@@ -34,7 +34,10 @@ customers = ["Alice", "Bob", "Charlie", "Diana"]
 daily_earnings = 0
 current_cart = []
 current_customer = ""
-customer_done = True  # IMPORTANT FIX
+customer_done = True
+
+# NEW: customer money
+customer_wallet = 0
 
 
 # -----------------------
@@ -51,50 +54,96 @@ def generate_cart():
             item.apply_discount(20)
 
 
+def generate_wallet(total_estimate):
+    """
+    Customer money depends on bill:
+    - sometimes exact-ish
+    - sometimes a bit more
+    - sometimes not enough
+    """
+    mode = random.random()
+
+    if mode < 0.4:
+        # enough money
+        return round(total_estimate + random.uniform(0, 10), 2)
+    elif mode < 0.8:
+        # tight budget
+        return round(total_estimate * random.uniform(0.7, 1.0), 2)
+    else:
+        # rich customer
+        return round(total_estimate + random.uniform(10, 50), 2)
+
+
 def update_display():
     cart_list.delete(*cart_list.get_children())
 
-    total = 0
+    total = sum(item.current_price for item in current_cart)
     now = datetime.now().strftime("%H:%M:%S")
 
     customer_label.config(text=f"Customer: {current_customer}")
     time_label.config(text=f"Time: {now}")
+    wallet_label.config(text=f"Customer Cash: ${customer_wallet}")
 
     for item in current_cart:
         cart_list.insert("", "end", values=(item.name, f"${item.current_price}"))
-        total += item.current_price
 
     total_label.config(text=f"TOTAL: ${round(total, 2)}")
     earnings_label.config(text=f"Daily Earnings: ${round(daily_earnings, 2)}")
 
 
 def new_customer():
-    global current_customer, customer_done
+    global current_customer, customer_done, customer_wallet
 
-    # BLOCK switching until current customer is finished
     if current_customer and not customer_done:
         return
 
     customer_done = False
     current_customer = random.choice(customers)
+
     generate_cart()
+
+    total = sum(item.current_price for item in current_cart)
+    customer_wallet = generate_wallet(total)
+
     update_display()
 
 
+# -----------------------
+# CHECKOUT + PAYMENT LOGIC
+# -----------------------
 def checkout():
-    global daily_earnings, customer_done
+    global daily_earnings, customer_done, customer_wallet
 
     total = sum(item.current_price for item in current_cart)
-    daily_earnings += total
 
-    customer_done = True
+    # Customer tries to pay
+    if customer_wallet >= total:
+        change = round(customer_wallet - total, 2)
+        daily_earnings += total
+
+        result_label.config(
+            text=f"Payment SUCCESS ✔ | Change: ${change}",
+            foreground="green"
+        )
+
+        customer_done = True
+
+    else:
+        shortage = round(total - customer_wallet, 2)
+
+        result_label.config(
+            text=f"INSUFFICIENT FUNDS ❌ | Needs ${shortage} more",
+            foreground="red"
+        )
+
+        customer_done = False
+
     update_display()
 
 
 def finish_customer():
     global customer_done
 
-    # Only allow next customer if current is done
     if customer_done:
         new_customer()
 
@@ -117,6 +166,7 @@ def print_receipt():
         text.insert("end", f"{item.name} - ${item.current_price}\n")
 
     text.insert("end", f"\nTOTAL: ${round(total,2)}\n")
+    text.insert("end", f"Customer Paid: ${customer_wallet}\n")
 
 
 def clock_out():
@@ -124,11 +174,11 @@ def clock_out():
 
 
 # -----------------------
-# GUI SETUP
+# GUI
 # -----------------------
 root = tk.Tk()
 root.title("Supermarket Register")
-root.geometry("450x520")
+root.geometry("500x550")
 root.configure(bg="#f4f4f4")
 
 
@@ -136,7 +186,6 @@ style = ttk.Style()
 style.theme_use("clam")
 
 
-# Header
 header = ttk.Frame(root)
 header.pack(pady=10)
 
@@ -146,8 +195,10 @@ customer_label.pack()
 time_label = ttk.Label(header, text="Time:", font=("Arial", 10))
 time_label.pack()
 
+wallet_label = ttk.Label(header, text="Customer Cash: $0")
+wallet_label.pack()
 
-# Cart Table
+
 cart_frame = ttk.Frame(root)
 cart_frame.pack(pady=10)
 
@@ -157,20 +208,16 @@ cart_list.heading("Price", text="Price")
 cart_list.pack()
 
 
-# Totals
 total_label = ttk.Label(root, text="TOTAL: $0", font=("Arial", 14))
 total_label.pack(pady=5)
 
 earnings_label = ttk.Label(root, text="Daily Earnings: $0")
 earnings_label.pack()
 
-
-# Payment option
-payment_var = tk.StringVar(value="Cash")
-ttk.OptionMenu(root, payment_var, "Cash", "Card").pack(pady=5)
+result_label = ttk.Label(root, text="", font=("Arial", 11))
+result_label.pack(pady=5)
 
 
-# Buttons
 btn_frame = ttk.Frame(root)
 btn_frame.pack(pady=15)
 
@@ -181,7 +228,7 @@ ttk.Button(btn_frame, text="Finish Customer", command=finish_customer).grid(row=
 ttk.Button(btn_frame, text="Clock Out", command=clock_out).grid(row=2, column=0, columnspan=2, pady=5)
 
 
-# Start first customer
+# START
 new_customer()
 
 root.mainloop()
