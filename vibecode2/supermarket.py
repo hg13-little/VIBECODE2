@@ -147,7 +147,7 @@ def checkout():
             foreground="red"
         )
 
-        customer_done = False
+        customer_done = True
 
     update_display()
 
