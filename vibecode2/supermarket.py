@@ -33,16 +33,13 @@ daily_earnings = 0
 current_cart = []
 current_customer = ""
 customer_done = True
-
-# NEW: customer money
 customer_wallet = 0
 product_images = {}
 
-#conveyer belt
+# conveyor
 belt_running = False
-belt_offset = 0 
+belt_offset = 0
 belt_speed = 4
-
 animated_items = []
 scanner_x = 580
 
@@ -51,7 +48,6 @@ scanner_x = 580
 
 def generate_cart():
     global current_cart
-
     current_cart = random.sample(items, random.randint(2, 5))
 
     for item in current_cart:
@@ -61,31 +57,23 @@ def generate_cart():
 
 
 def generate_wallet(total_estimate):
-    """
-    Customer money depends on bill:
-    - sometimes exact-ish
-    - sometimes a bit more
-    - sometimes not enough
-    """
     mode = random.random()
-
     if mode < 0.4:
-        # enough money
         return round(total_estimate + random.uniform(0, 10), 2)
     elif mode < 0.8:
-        # tight budget
         return round(total_estimate * random.uniform(0.7, 1.0), 2)
     else:
-        # rich customer
         return round(total_estimate + random.uniform(10, 50), 2)
 
-def load_product_images():
-    global product_images
 
+def load_product_images():
     for item in items:
-        img = Image.open(item.image_path)
-        img = img.resize((40, 40))
-        product_images[item.name] = ImageTk.PhotoImage(img)
+        try:
+            img = Image.open(item.image_path).resize((40, 40))
+            product_images[item.name] = ImageTk.PhotoImage(img)
+        except:
+            product_images[item.name] = None  # fallback if image missing
+
 
 def update_display():
     cart_list.delete(*cart_list.get_children())
@@ -99,12 +87,12 @@ def update_display():
 
     for item in current_cart:
         cart_list.insert(
-        "",
-        "end",
-        text=item.name,
-        image=product_images[item.name],
-        values=(f"${item.current_price}",)
-    )
+            "",
+            "end",
+            text=item.name,
+            image=product_images.get(item.name),
+            values=(f"${item.current_price}",)
+        )
 
     total_label.config(text=f"TOTAL: ${round(total, 2)}")
     earnings_label.config(text=f"Daily Earnings: ${round(daily_earnings, 2)}")
@@ -120,49 +108,30 @@ def new_customer():
     current_customer = random.choice(customers)
 
     generate_cart()
-
     total = sum(item.current_price for item in current_cart)
     customer_wallet = generate_wallet(total)
 
     update_display()
 
 
-
-# CHECKOUT + PAYMENT 
-
 def checkout():
-    global daily_earnings, customer_done, customer_wallet
+    global daily_earnings, customer_done
 
     total = sum(item.current_price for item in current_cart)
 
-    # Customer tries to pay
     if customer_wallet >= total:
         change = round(customer_wallet - total, 2)
         daily_earnings += total
-
-        result_label.config(
-            text=f"Payment SUCCESS ✔ | Change: ${change}",
-            foreground="green"
-        )
-
-        customer_done = True
-
+        result_label.config(text=f"Payment SUCCESS ✔ | Change: ${change}", foreground="green")
     else:
         shortage = round(total - customer_wallet, 2)
+        result_label.config(text=f"INSUFFICIENT FUNDS ❌ | Needs ${shortage}", foreground="red")
 
-        result_label.config(
-            text=f"INSUFFICIENT FUNDS ❌ | Needs ${shortage} more",
-            foreground="red"
-        )
-
-        customer_done = True
-
+    customer_done = True
     update_display()
 
 
 def finish_customer():
-    global customer_done
-
     if customer_done:
         new_customer()
 
@@ -170,7 +139,6 @@ def finish_customer():
 def print_receipt():
     receipt = tk.Toplevel(root)
     receipt.title("Receipt")
-    receipt.geometry("300x400")
 
     text = tk.Text(receipt)
     text.pack(fill="both", expand=True)
@@ -178,8 +146,7 @@ def print_receipt():
     total = sum(item.current_price for item in current_cart)
 
     text.insert("end", "----- RECEIPT -----\n")
-    text.insert("end", f"{current_customer}\n")
-    text.insert("end", f"{datetime.now()}\n\n")
+    text.insert("end", f"{current_customer}\n{datetime.now()}\n\n")
 
     for item in current_cart:
         text.insert("end", f"{item.name} - ${item.current_price}\n")
@@ -191,193 +158,113 @@ def print_receipt():
 def clock_out():
     root.destroy()
 
-#conveyor functions 
-def setup_converyor_items():
-    global animated_items = []
 
+# CONVEYOR
+
+def setup_conveyor_items():
+    global animated_items
     animated_items = []
 
     x_start = 60
     spacing = 95
     y_pos = 95
-    
+
     for i in range(5):
-        animated_items.append({
-            "x": x_start + (i * spacing),
-             "y": y_pos
-            })
-        
+        animated_items.append({"x": x_start + i * spacing, "y": y_pos})
+
+
 def draw_conveyor():
-     global belt_offset
-     conveyor_canvas.delete("all")
+    global belt_offset
+    conveyor_canvas.delete("all")
 
+    # belt
+    conveyor_canvas.create_rectangle(30, 60, 670, 130, fill="#444")
 
-
-    # Belt base
-conveyor_canvas.create_rectangle(
-    30, 60,
-    670, 130,
-    fill="#444",
-    outline="#222"
-    )
-
-    # Moving stripes
+    # stripes
     for i in range(-20, 700, 40):
         x1 = i + belt_offset
-        
-        conveyor_canvas.create_rectangle(
-            x1, 60.
-            x1 + 20, 130,
-            fill="#666",
-            outline=""
-        )
+        conveyor_canvas.create_rectangle(x1, 60, x1 + 20, 130, fill="#666")
 
-    # Scanner
-    conveyor_canvas.create_rectangle(
-        scanner_x,
-        45,
-        scanner_x + 35,
-        145,
-        fill="green"
-    )
+    # scanner
+    conveyor_canvas.create_rectangle(scanner_x, 45, scanner_x + 35, 145, fill="green")
+    conveyor_canvas.create_text(scanner_x + 17, 30, text="Scanner")
 
-    conveyor_canvas.create_text(
-        scanner_x + 17,
-        30,
-        text="Scanner"
-    )
-
-    # Placeholder items
+    # items
     for obj in animated_items:
-        x = obj["x"]
-        y = obj["y"]
-        
-        conveyor_canvas.create_rectangle(
-            x - 20,
-            y - 20,
-            x + 20,
-            y + 20,
-            fill="white",
-            outline="black"
-        )
-
+        x, y = obj["x"], obj["y"]
+        conveyor_canvas.create_rectangle(x-20, y-20, x+20, y+20, fill="white")
 
 
 def animate_conveyor():
     global belt_offset
-    
+
     if belt_running:
         belt_offset = (belt_offset + belt_speed) % 40
-        
+
         for obj in animated_items:
-            
             obj["x"] += 2
-            
             if obj["x"] > scanner_x:
-                
                 obj["x"] = 60
-                
+
         draw_conveyor()
-        
-        root.after(
-            50,
-            animate_conveyor
-        )
-
-
-
+        root.after(50, animate_conveyor)
     else:
         draw_conveyor()
 
 
-
 def start_belt():
     global belt_running
-    
     if not belt_running:
         belt_running = True
         animate_conveyor()
+
 
 def stop_belt():
     global belt_running
     belt_running = False
 
+
 # GUI
 
 root = tk.Tk()
 root.title("Supermarket Register")
-root.geometry("500x550")
-root.configure(bg="#f4f4f4")
+root.geometry("600x600")
 
-
-style = ttk.Style()
-style.theme_use("clam")
-
-
-header = ttk.Frame(root)
-header.pack(pady=10)
-
-customer_label = ttk.Label(header, text="Customer:", font=("Arial", 14))
+customer_label = ttk.Label(root, text="Customer:")
 customer_label.pack()
 
-time_label = ttk.Label(header, text="Time:", font=("Arial", 10))
+time_label = ttk.Label(root, text="Time:")
 time_label.pack()
 
-wallet_label = ttk.Label(header, text="Customer Cash: $0")
+wallet_label = ttk.Label(root, text="Customer Cash:")
 wallet_label.pack()
 
-conveyor_canvas = tk.Canvas(
-    root,
-    width=700,
-    height=180,
-    bg="white"
-)
+conveyor_canvas = tk.Canvas(root, width=700, height=180, bg="white")
+conveyor_canvas.pack()
 
-conveyor_canvas.pack(pady=10)
-
-cart_frame = ttk.Frame(root)
-cart_frame.pack(pady=10)
-
-cart_list = ttk.Treeview(cart_frame, columns=("Price",), show="tree headings", height=8)
+cart_list = ttk.Treeview(root, columns=("Price",), show="tree headings", height=8)
 cart_list.heading("#0", text="Product")
 cart_list.heading("Price", text="Price")
-cart_list.column("#0", width=200)
-cart_list.column("Price", width=100, anchor="center")
 cart_list.pack()
 
-total_label = ttk.Label(root, text="TOTAL: $0", font=("Arial", 14))
-total_label.pack(pady=5)
+total_label = ttk.Label(root, text="TOTAL: $0")
+total_label.pack()
 
 earnings_label = ttk.Label(root, text="Daily Earnings: $0")
 earnings_label.pack()
 
-result_label = ttk.Label(root, text="", font=("Arial", 11))
-result_label.pack(pady=5)
+result_label = ttk.Label(root, text="")
+result_label.pack()
 
-#control buttons
-belt_frame = ttk.Frame(root)
-belt_frame.pack()
+# buttons
+ttk.Button(root, text="Start Belt", command=start_belt).pack()
+ttk.Button(root, text="Stop Belt", command=stop_belt).pack()
 
-ttk.Button(
-    belt_frame,
-    text="Start Belt"
-    comnmand=start_belt
-).grid(row=0, column=0, padx=5)
-
-ttk.Button(
-    belt_frame,
-    text="End Belt"
-    comnmand=finish_belt
-).grid(row=0, column=1, padx=5)
-
-btn_frame = ttk.Frame(root)
-btn_frame.pack(pady=15)
-
-ttk.Button(btn_frame, text="Next Customer", command=new_customer).grid(row=0, column=0, padx=5)
-ttk.Button(btn_frame, text="Checkout", command=checkout).grid(row=0, column=1, padx=5)
-ttk.Button(btn_frame, text="Receipt", command=print_receipt).grid(row=1, column=0, padx=5)
-ttk.Button(btn_frame, text="Finish Customer", command=finish_customer).grid(row=1, column=1, padx=5)
-ttk.Button(btn_frame, text="Clock Out", command=clock_out).grid(row=2, column=0, columnspan=2, pady=5)
+ttk.Button(root, text="Next Customer", command=new_customer).pack()
+ttk.Button(root, text="Checkout", command=checkout).pack()
+ttk.Button(root, text="Receipt", command=print_receipt).pack()
+ttk.Button(root, text="Finish Customer", command=finish_customer).pack()
+ttk.Button(root, text="Clock Out", command=clock_out).pack()
 
 
 # START
@@ -385,6 +272,5 @@ load_product_images()
 setup_conveyor_items()
 draw_conveyor()
 new_customer()
-
 
 root.mainloop()
