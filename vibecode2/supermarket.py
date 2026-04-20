@@ -38,6 +38,14 @@ customer_done = True
 customer_wallet = 0
 product_images = {}
 
+#conveyer belt
+belt_running = False
+belt_offset = 0 
+belt_speed = 4
+
+animated_items = []
+scanner_x = 580
+
 
 # LOGIC
 
@@ -183,7 +191,116 @@ def print_receipt():
 def clock_out():
     root.destroy()
 
+#conveyor functions 
+def setup_converyor_items():
+    global animated_items = []
 
+    animated_items = []
+
+    x_start = 60
+    spacing = 95
+    y_pos = 95
+    
+    for i in range(5):
+        animated_items.append({
+            "x": x_start + (i * spacing),
+             "y": y_pos
+            })
+        
+def draw_conveyor():
+     global belt_offset
+     conveyor_canvas.delete("all")
+
+
+
+    # Belt base
+conveyor_canvas.create_rectangle(
+    30, 60,
+    670, 130,
+    fill="#444",
+    outline="#222"
+    )
+
+    # Moving stripes
+    for i in range(-20, 700, 40):
+        x1 = i + belt_offset
+        
+        conveyor_canvas.create_rectangle(
+            x1, 60.
+            x1 + 20, 130,
+            fill="#666",
+            outline=""
+        )
+
+    # Scanner
+    conveyor_canvas.create_rectangle(
+        scanner_x,
+        45,
+        scanner_x + 35,
+        145,
+        fill="green"
+    )
+
+    conveyor_canvas.create_text(
+        scanner_x + 17,
+        30,
+        text="Scanner"
+    )
+
+    # Placeholder items
+    for obj in animated_items:
+        x = obj["x"]
+        y = obj["y"]
+        
+        conveyor_canvas.create_rectangle(
+            x - 20,
+            y - 20,
+            x + 20,
+            y + 20,
+            fill="white",
+            outline="black"
+        )
+
+
+
+def animate_conveyor():
+    global belt_offset
+    
+    if belt_running:
+        belt_offset = (belt_offset + belt_speed) % 40
+        
+        for obj in animated_items:
+            
+            obj["x"] += 2
+            
+            if obj["x"] > scanner_x:
+                
+                obj["x"] = 60
+                
+        draw_conveyor()
+        
+        root.after(
+            50,
+            animate_conveyor
+        )
+
+
+
+    else:
+        draw_conveyor()
+
+
+
+def start_belt():
+    global belt_running
+    
+    if not belt_running:
+        belt_running = True
+        animate_conveyor()
+
+def stop_belt():
+    global belt_running
+    belt_running = False
 
 # GUI
 
@@ -209,6 +326,14 @@ time_label.pack()
 wallet_label = ttk.Label(header, text="Customer Cash: $0")
 wallet_label.pack()
 
+conveyor_canvas = tk.Canvas(
+    root,
+    width=700,
+    height=180,
+    bg="white"
+)
+
+conveyor_canvas.pack(pady=10)
 
 cart_frame = ttk.Frame(root)
 cart_frame.pack(pady=10)
@@ -229,6 +354,21 @@ earnings_label.pack()
 result_label = ttk.Label(root, text="", font=("Arial", 11))
 result_label.pack(pady=5)
 
+#control buttons
+belt_frame = ttk.Frame(root)
+belt_frame.pack()
+
+ttk.Button(
+    belt_frame,
+    text="Start Belt"
+    comnmand=start_belt
+).grid(row=0, column=0, padx=5)
+
+ttk.Button(
+    belt_frame,
+    text="End Belt"
+    comnmand=finish_belt
+).grid(row=0, column=1, padx=5)
 
 btn_frame = ttk.Frame(root)
 btn_frame.pack(pady=15)
@@ -242,6 +382,9 @@ ttk.Button(btn_frame, text="Clock Out", command=clock_out).grid(row=2, column=0,
 
 # START
 load_product_images()
+setup_conveyor_items()
+draw_conveyor()
 new_customer()
+
 
 root.mainloop()
