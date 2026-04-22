@@ -2,333 +2,268 @@ import tkinter as tk
 from tkinter import ttk
 import random
 from datetime import datetime
-
-# PIL es opcional. Si no está instalado, el programa sigue funcionando.
+import os
 try:
     from PIL import Image, ImageTk
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
+    PIL_AVAILABLE=True
+except:
+    PIL_AVAILABLE=False
 
-
-# =========================
-# DATA MODEL
-# =========================
+BASE_DIR=os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR=os.path.join(BASE_DIR,"images")
 
 class GroceryItem:
-    def __init__(self, name, price, image_path):
-        self.name = name
-        self.base_price = price
-        self.current_price = price
-        self.image_path = image_path
+    def __init__(self,name,price,image_path):
+        self.name=name
+        self.base_price=price
+        self.current_price=price
+        self.image_path=image_path
+        self.discount_label=""
+        self.discount_amount=0.0
+    def reset(self):
+        self.current_price=self.base_price
+        self.discount_label=""
+        self.discount_amount=0.0
+    def apple_discount(self):
+        self.discount_amount=round(self.base_price*0.5,2)
+        self.current_price=round(self.base_price-self.discount_amount,2)
+        self.discount_label="2nd unit 50%"
+    def chicken_discount(self):
+        self.discount_amount=round(self.base_price*0.2,2)
+        self.current_price=round(self.base_price-self.discount_amount,2)
+        self.discount_label="20% off"
 
-    def apply_discount(self, percent):
-        discount = self.base_price * (percent / 100)
-        self.current_price = round(self.base_price - discount, 2)
+def clone(item):
+    x=GroceryItem(item.name,item.base_price,item.image_path)
+    return x
 
-
-items = [
-    GroceryItem("Milk", 3.50, "images/Milk.png"),
-    GroceryItem("Bread", 2.00, "images/Bread.png"),
-    GroceryItem("Eggs", 4.00, "images/Eggs.png"),
-    GroceryItem("Apples", 5.00, "images/Apples.png"),
-    GroceryItem("Chicken", 10.00, "images/Chicken.png"),
-    GroceryItem("Rice", 6.00, "images/Rice.png")
+items_catalog=[
+    GroceryItem("Milk",3.50,os.path.join(IMAGES_DIR,"Milk.png")),
+    GroceryItem("Bread",2.00,os.path.join(IMAGES_DIR,"Bread.png")),
+    GroceryItem("Eggs",4.00,os.path.join(IMAGES_DIR,"Eggs.png")),
+    GroceryItem("Apples",5.00,os.path.join(IMAGES_DIR,"Apples.png")),
+    GroceryItem("Chicken",10.00,os.path.join(IMAGES_DIR,"Chicken.png")),
+    GroceryItem("Rice",6.00,os.path.join(IMAGES_DIR,"Rice.png"))
 ]
 
-customers = ["Alice", "Bob", "Charlie", "Diana"]
+customers=["Alice","Bob","Charlie","Diana"]
 
-daily_earnings = 0.0
-current_cart = []
-current_customer = ""
-customer_done = True
-customer_wallet = 0.0
-product_images = {}
-
-# Conveyor
-belt_running = False
-belt_offset = 0
-belt_speed = 4
-animated_items = []
-scanner_x = 580
-
-
-# =========================
-# LOGIC
-# =========================
+daily_earnings=0.0
+customers_served=0
+current_cart=[]
+scanned_items=[]
+current_customer=""
+customer_done=True
+customer_wallet=0.0
+payment_done=False
+product_images={}
+belt_running=False
+belt_offset=0
+scanner_x=580
+belt_speed=3
+belt_objects=[]
+scan_flash=0
 
 def generate_cart():
     global current_cart
-
-    cart_size = random.randint(2, 5)
-    current_cart = random.sample(items, cart_size)
-
+    current_cart=[]
+    for _ in range(random.randint(2,10)):
+        item=clone(random.choice(items_catalog))
+        item.reset()
+        current_cart.append(item)
+    apple_count=0
     for item in current_cart:
-        item.current_price = item.base_price
-        if random.random() < 0.3:
-            item.apply_discount(20)
+        if item.name=="Chicken":
+            item.chicken_discount()
+        elif item.name=="Apples":
+            apple_count+=1
+            if apple_count%2==0:
+                item.apple_discount()
 
+def generate_wallet(total):
+    return round(total+random.uniform(-5,20),2)
 
-def generate_wallet(total_estimate):
-    mode = random.random()
+def scanned_total():
+    return round(sum(i.current_price for i in scanned_items),2)
 
-    if mode < 0.4:
-        return round(total_estimate + random.uniform(0, 10), 2)
-    elif mode < 0.8:
-        return round(total_estimate * random.uniform(0.7, 1.0), 2)
-    else:
-        return round(total_estimate + random.uniform(10, 50), 2)
+def total_discount():
+    return round(sum(i.discount_amount for i in scanned_items),2)
 
+def summary():
+    s={}
+    for i in scanned_items:
+        if i.name not in s:
+            s[i.name]={"q":0,"base":0,"disc":0,"final":0,"promo":[]}
+        s[i.name]["q"]+=1
+        s[i.name]["base"]+=i.base_price
+        s[i.name]["disc"]+=i.discount_amount
+        s[i.name]["final"]+=i.current_price
+        if i.discount_label:
+            s[i.name]["promo"].append(i.discount_label)
+    return s
 
-def load_product_images():
+def load_images():
     if not PIL_AVAILABLE:
-        for item in items:
-            product_images[item.name] = None
         return
-
-    for item in items:
+    for i in items_catalog:
         try:
-            img = Image.open(item.image_path).resize((40, 40))
-            product_images[item.name] = ImageTk.PhotoImage(img)
-        except Exception:
-            product_images[item.name] = None
-
+            img=Image.open(i.image_path).resize((48,48))
+            product_images[i.name]=ImageTk.PhotoImage(img)
+        except:
+            product_images[i.name]=None
 
 def update_display():
     cart_list.delete(*cart_list.get_children())
-
-    total = sum(item.current_price for item in current_cart)
-    now = datetime.now().strftime("%H:%M:%S")
-
+    customers_label.config(text=f"Customers Served: {customers_served}")
     customer_label.config(text=f"Customer: {current_customer}")
-    time_label.config(text=f"Time: {now}")
-    wallet_label.config(text=f"Customer Cash: ${customer_wallet:.2f}")
-    total_label.config(text=f"TOTAL: ${total:.2f}")
-    earnings_label.config(text=f"Daily Earnings: ${daily_earnings:.2f}")
+    time_label.config(text=f"Time: {datetime.now().strftime('%H:%M:%S')}")
+    wallet_label.config(text=f"Cash: ${customer_wallet:.2f}")
+    total_label.config(text=f"Total: ${scanned_total():.2f}")
+    discount_label.config(text=f"Discount: -${total_discount():.2f}")
+    pending_label.config(text=f"Pending: {len(current_cart)-len(scanned_items)}")
+    earnings_label.config(text=f"Earnings: ${daily_earnings:.2f}")
+    for name,d in summary().items():
+        promo=", ".join(set(d["promo"])) if d["promo"] else "-"
+        cart_list.insert("", "end", values=(name,d["q"],f"${d['base']:.2f}",promo,f"-${d['disc']:.2f}",f"${d['final']:.2f}"))
 
-    for item in current_cart:
-        discount_text = "Yes" if item.current_price < item.base_price else "No"
-
-        # IMPORTANTE:
-        # Usamos solo columnas normales en el Treeview.
-        # Así evitamos el error TclError: unknown option "$2.0"
-        cart_list.insert(
-            "",
-            "end",
-            values=(
-                item.name,
-                f"${item.current_price:.2f}",
-                discount_text
-            )
-        )
-
+def setup_belt():
+    global belt_objects
+    belt_objects=[]
+    for i,x in enumerate(current_cart):
+        belt_objects.append({"item":x,"x":80+i*95,"y":95,"scanned":False,"visible":True})
 
 def new_customer():
-    global current_customer, customer_done, customer_wallet
-
-    if current_customer and not customer_done:
+    global current_customer,customer_done,customer_wallet,scanned_items,payment_done
+    if not customer_done:
         return
-
-    customer_done = False
-    current_customer = random.choice(customers)
-
+    scanned_items=[]
+    payment_done=False
+    current_customer=random.choice(customers)
+    customer_done=False
     generate_cart()
-    total = sum(item.current_price for item in current_cart)
-    customer_wallet = generate_wallet(total)
-
-    result_label.config(text="", foreground="black")
+    customer_wallet=generate_wallet(sum(i.current_price for i in current_cart))
+    setup_belt()
     update_display()
+    draw()
 
+def process(o):
+    if o["scanned"]:
+        return
+    o["scanned"]=True
+    o["visible"]=False
+    scanned_items.append(o["item"])
+    update_display()
 
 def checkout():
-    global daily_earnings, customer_done
-
-    total = sum(item.current_price for item in current_cart)
-
-    if customer_wallet >= total:
-        change = round(customer_wallet - total, 2)
-        daily_earnings += total
-        result_label.config(
-            text=f"Payment SUCCESS ✔ | Change: ${change:.2f}",
-            foreground="green"
-        )
-    else:
-        shortage = round(total - customer_wallet, 2)
-        result_label.config(
-            text=f"INSUFFICIENT FUNDS ❌ | Needs ${shortage:.2f}",
-            foreground="red"
-        )
-
-    customer_done = True
+    global daily_earnings,customer_done,payment_done,customers_served
+    if len(scanned_items)<len(current_cart):
+        return
+    if payment_done:
+        return
+    total=scanned_total()
+    if customer_wallet>=total:
+        daily_earnings+=total
+    payment_done=True
+    customer_done=True
+    customers_served+=1
     update_display()
 
-
 def finish_customer():
-    if customer_done:
-        new_customer()
+    if not customer_done:
+        return
+    new_customer()
 
-
-def print_receipt():
-    receipt = tk.Toplevel(root)
-    receipt.title("Receipt")
-    receipt.geometry("300x300")
-
-    text = tk.Text(receipt)
-    text.pack(fill="both", expand=True)
-
-    total = sum(item.current_price for item in current_cart)
-
-    text.insert("end", "----- RECEIPT -----\n")
-    text.insert("end", f"{current_customer}\n")
-    text.insert("end", f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-
-    for item in current_cart:
-        text.insert("end", f"{item.name} - ${item.current_price:.2f}\n")
-
-    text.insert("end", f"\nTOTAL: ${total:.2f}\n")
-    text.insert("end", f"Customer Paid: ${customer_wallet:.2f}\n")
-
-    if customer_wallet >= total:
-        text.insert("end", f"Change: ${customer_wallet - total:.2f}\n")
+def draw_item(o):
+    x,y=o["x"],o["y"]
+    img=product_images.get(o["item"].name)
+    conveyor.create_rectangle(x-30,y-30,x+30,y+30,fill="white")
+    if img:
+        conveyor.create_image(x,y,image=img)
     else:
-        text.insert("end", f"Missing: ${total - customer_wallet:.2f}\n")
+        conveyor.create_text(x,y,text=o["item"].name[:4])
 
+def draw():
+    conveyor.delete("all")
+    conveyor.create_rectangle(30,60,670,130,fill="#444")
+    for i in range(-40,740,40):
+        conveyor.create_rectangle(i+belt_offset,60,i+20+belt_offset,130,fill="#666")
+    conveyor.create_rectangle(scanner_x,45,scanner_x+35,145,fill="green")
+    for o in belt_objects:
+        if o["visible"]:
+            draw_item(o)
+
+def animate():
+    global belt_offset
+    if not belt_running:
+        draw()
+        return
+    belt_offset=(belt_offset+3)%40
+    for o in belt_objects:
+        if o["visible"]:
+            o["x"]+=3
+            if o["x"]>=scanner_x:
+                process(o)
+    draw()
+    if any(o["visible"] for o in belt_objects):
+        root.after(50,animate)
+
+def start_belt():
+    global belt_running
+    belt_running=True
+    animate()
+
+def stop_belt():
+    global belt_running
+    belt_running=False
 
 def clock_out():
     root.destroy()
 
+root=tk.Tk()
+root.geometry("900x750")
 
-# =========================
-# CONVEYOR
-# =========================
+customers_label=ttk.Label(root)
+customers_label.pack()
 
-def setup_conveyor_items():
-    global animated_items
-    animated_items = []
+customer_label=ttk.Label(root)
+customer_label.pack()
 
-    x_start = 60
-    spacing = 95
-    y_pos = 95
+time_label=ttk.Label(root)
+time_label.pack()
 
-    for i in range(5):
-        animated_items.append({"x": x_start + i * spacing, "y": y_pos})
+wallet_label=ttk.Label(root)
+wallet_label.pack()
 
+conveyor=tk.Canvas(root,width=700,height=180,bg="white")
+conveyor.pack()
 
-def draw_conveyor():
-    global belt_offset
+cart_list=ttk.Treeview(root,columns=("P","Q","B","Promo","D","F"),show="headings")
+for c in ("P","Q","B","Promo","D","F"):
+    cart_list.heading(c,text=c)
+cart_list.pack()
 
-    conveyor_canvas.delete("all")
+total_label=ttk.Label(root)
+total_label.pack()
 
-    # Belt
-    conveyor_canvas.create_rectangle(30, 60, 670, 130, fill="#444", outline="")
+discount_label=ttk.Label(root)
+discount_label.pack()
 
-    # Stripes
-    for i in range(-20, 700, 40):
-        x1 = i + belt_offset
-        conveyor_canvas.create_rectangle(x1, 60, x1 + 20, 130, fill="#666", outline="")
+pending_label=ttk.Label(root)
+pending_label.pack()
 
-    # Scanner
-    conveyor_canvas.create_rectangle(scanner_x, 45, scanner_x + 35, 145, fill="green")
-    conveyor_canvas.create_text(scanner_x + 17, 30, text="Scanner")
+earnings_label=ttk.Label(root)
+earnings_label.pack()
 
-    # Animated items
-    for obj in animated_items:
-        x, y = obj["x"], obj["y"]
-        conveyor_canvas.create_rectangle(x - 20, y - 20, x + 20, y + 20, fill="white")
+frame=ttk.Frame(root)
+frame.pack()
 
+ttk.Button(frame,text="Start Belt",command=start_belt).grid(row=0,column=0)
+ttk.Button(frame,text="Stop Belt",command=stop_belt).grid(row=0,column=1)
+ttk.Button(frame,text="Next Customer",command=new_customer).grid(row=1,column=0)
+ttk.Button(frame,text="Checkout",command=checkout).grid(row=1,column=1)
+ttk.Button(frame,text="Finish Customer",command=finish_customer).grid(row=2,column=0)
+ttk.Button(frame,text="Clock Out",command=clock_out).grid(row=2,column=1)
 
-def animate_conveyor():
-    global belt_offset
-
-    if belt_running:
-        belt_offset = (belt_offset + belt_speed) % 40
-
-        for obj in animated_items:
-            obj["x"] += 2
-            if obj["x"] > scanner_x:
-                obj["x"] = 60
-
-        draw_conveyor()
-        root.after(50, animate_conveyor)
-    else:
-        draw_conveyor()
-
-
-def start_belt():
-    global belt_running
-    if not belt_running:
-        belt_running = True
-        animate_conveyor()
-
-
-def stop_belt():
-    global belt_running
-    belt_running = False
-
-
-# =========================
-# GUI
-# =========================
-
-root = tk.Tk()
-root.title("Supermarket Register")
-root.geometry("720x650")
-
-customer_label = ttk.Label(root, text="Customer:")
-customer_label.pack(pady=4)
-
-time_label = ttk.Label(root, text="Time:")
-time_label.pack(pady=4)
-
-wallet_label = ttk.Label(root, text="Customer Cash:")
-wallet_label.pack(pady=4)
-
-conveyor_canvas = tk.Canvas(root, width=700, height=180, bg="white")
-conveyor_canvas.pack(pady=10)
-
-# Treeview corregido:
-# Ya no usamos #0 ni imágenes dentro del insert para evitar el error TclError
-cart_list = ttk.Treeview(
-    root,
-    columns=("Product", "Price", "Discount"),
-    show="headings",
-    height=8
-)
-
-cart_list.heading("Product", text="Product")
-cart_list.heading("Price", text="Price")
-cart_list.heading("Discount", text="Discount")
-
-cart_list.column("Product", width=220, anchor="center")
-cart_list.column("Price", width=100, anchor="center")
-cart_list.column("Discount", width=100, anchor="center")
-
-cart_list.pack(pady=10)
-
-total_label = ttk.Label(root, text="TOTAL: $0.00")
-total_label.pack(pady=4)
-
-earnings_label = ttk.Label(root, text="Daily Earnings: $0.00")
-earnings_label.pack(pady=4)
-
-result_label = ttk.Label(root, text="")
-result_label.pack(pady=8)
-
-button_frame = ttk.Frame(root)
-button_frame.pack(pady=10)
-
-ttk.Button(button_frame, text="Start Belt", command=start_belt).grid(row=0, column=0, padx=5, pady=5)
-ttk.Button(button_frame, text="Stop Belt", command=stop_belt).grid(row=0, column=1, padx=5, pady=5)
-ttk.Button(button_frame, text="Next Customer", command=new_customer).grid(row=1, column=0, padx=5, pady=5)
-ttk.Button(button_frame, text="Checkout", command=checkout).grid(row=1, column=1, padx=5, pady=5)
-ttk.Button(button_frame, text="Receipt", command=print_receipt).grid(row=2, column=0, padx=5, pady=5)
-ttk.Button(button_frame, text="Finish Customer", command=finish_customer).grid(row=2, column=1, padx=5, pady=5)
-ttk.Button(button_frame, text="Clock Out", command=clock_out).grid(row=3, column=0, columnspan=2, padx=5, pady=5)
-
-# START
-load_product_images()
-setup_conveyor_items()
-draw_conveyor()
+load_images()
 new_customer()
-
 root.mainloop()
